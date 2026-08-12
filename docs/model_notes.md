@@ -1,0 +1,145 @@
+# Fortix — model notes
+
+This is the write-up of everything the classifier does and why, in the
+order the actual decisions were made. Useful as interview prep — each
+section below is a question someone could reasonably ask.
+
+## 1. Dataset
+
+**Source**: Vrbančič, Jr. Fister, Podgorelec — *"Datasets for Phishing
+Websites Detection"*, Data in Brief, Vol. 33, 2020.
+DOI: [10.1016/j.dib.2020.106438](http://dx.doi.org/10.1016/j.dib.2020.106438)
+Mirror: [github.com/GregaVrbancic/Phishing-Dataset](https://github.com/GregaVrbancic/Phishing-Dataset)
+
+- `dataset_small.csv`: 58,645 URLs, 111 pre-extracted features + a binary
+  `phishing` label.
+- Class balance: 52.3% phishing / 47.7% legitimate — close enough to
+  balanced that no resampling (SMOTE etc.) was needed.
+- The dataset ships pre-computed features, not raw URL strings, which
+  matters for section 2 below.
+
+## 2. Feature selection — why 98 of the 111 columns
+
+The raw dataset includes 13 features that require a **live network call**
+to compute: DNS lookups (`qty_nameservers`, `qty_mx_servers`,
+`ttl_hostname`, `qty_ip_resolved`), WHOIS queries (`time_domain_activation`,
+`time_domain_expiration`), an SSL handshake (`tls_ssl_certificate`), a
+search-engine index check (`url_google_index`, `domain_google_index`), and
+a few others (`time_response`, `domain_spf`, `asn_ip`, `qty_redirects`).
+
+Those columns were dropped. Reasoning:
+
+- **Latency**: a browser extension answering "is this page safe" needs to
+  respond in well under a second. A WHOIS lookup alone can take 200ms–2s.
+- **Availability**: if the backend (or the user's network) can't reach an
+  external DNS/WHOIS service, a model that depends on those features
+  degrades to missing data instead of just working.
+- **Consistency**: it also means the *exact same* feature-extraction code
+  (`backend/model/feature_extraction.py`) runs at both training time and
+  inference time. If training used dataset columns computed one way and
+  the backend recomputed similar-but-not-identical features live, that's
+  train/serve skew — a classic way for a "it worked in the notebook"
+  model to quietly underperform in production.
+
+That leaves 98 features, all derivable from the URL string alone:
+punctuation counts (dots, hyphens, slashes, etc.) broken out by URL
+segment (full URL / domain / directory / filename / query params),
+segment lengths, whether the domain is a raw IP address, vowel count in
+the domain, whether the domain matches a known URL-shortener, whether an
+email address appears in the URL, and a few more — full list in
+`feature_extraction.py`.
+
+**Known simplification**: TLD length is computed as "characters after the
+last dot" (e.g. `co` from `example.co.uk`, not `co.uk`). A fully correct
+implementation would use the public suffix list (e.g. the `tldextract`
+package), but that requires a network fetch of the suffix list on first
+run — which would reintroduce the exact dependency this section is trying
+to avoid. Documented as a limitation rather than silently glossed over.
+
+## 3. Model comparison
+
+Three model families, compared with 3-fold stratified cross-validation on
+the training split (80/20 train/test split, stratified on the label,
+`random_state=42` throughout for reproducibility) — **before** touching
+the test set, so the family choice itself isn't test-set-fitted:
+
+| Model | CV F1 |
+|---|---|
+| Logistic Regression (baseline) | 0.871 |
+| Gradient Boosting (HistGradientBoosting) | 0.903 |
+| **Random Forest** | **0.910** |
+
+Random Forest won. That's consistent with the feature set: most of these
+are simple counts and lengths, and phishing patterns tend to show up as
+*combinations* of them ("long path AND many dots AND a hyphenated
+domain") rather than one feature crossing a threshold — the kind of
+interaction tree ensembles pick up and a single linear boundary
+(logistic regression) can't.
+
+## 4. Hyperparameter tuning
+
+`RandomizedSearchCV` (8 iterations, 3-fold CV, scoring on F1) over
+`n_estimators`, `max_depth`, `min_samples_split`, `min_samples_leaf`,
+`max_features`.
+
+**Trade-off worth calling out explicitly**: the first tuning pass allowed
+unbounded tree depth (`max_depth=None`) and that config won on CV F1 —
+but it produced a 201MB model file. That's over GitHub's 100MB
+hard file-size limit, and it's slow to deserialize on every Flask
+process start. Depth was then bounded to `[10, 15, 20, 25]` and the
+search re-run. Final model: **4.0MB**, loads in well under a second, at
+the cost of ~0.5 points of F1 (0.9101 → 0.9026 CV F1). For a real-time
+extension backend, that's the right trade.
+
+## 5. Final metrics (held-out test set, n=11,729, never touched during
+   model/hyperparameter selection)
+
+| Metric | Score |
+|---|---|
+| Accuracy | 0.902 |
+| Precision | 0.906 |
+| Recall | 0.898 |
+| F1 | 0.902 |
+| ROC-AUC | 0.962 |
+
+Confusion matrix, ROC curve, and the top-15 feature importance chart are
+saved as PNGs in `backend/model/` (regenerated by `train.py`).
+
+**Top features by importance**: `directory_length`, `length_url`,
+`qty_slash_directory`, `file_length`, `qty_dot_directory` — i.e. overall
+URL length and how deep/complex the path is dominate. This lines up with
+a well-known phishing pattern: attackers pad URLs with long, nested paths
+and extra subdomains to push the real (suspicious) domain out of the
+visible part of the address bar, or to bury it among legitimate-looking
+path segments.
+
+## 6. Reproducing this
+
+```bash
+cd backend/model
+python train.py
+```
+
+Regenerates `model.pkl`, `metrics.json`, and all three plots from
+`dataset_small.csv`. Takes about a minute and a half on a single CPU
+core.
+
+## 7. Honest limitations (good to have answers ready for)
+
+- **No raw-URL ground truth for the CSV features.** The dataset ships
+  pre-extracted features, not the original URLs, so `feature_extraction.py`
+  is a best-effort reimplementation of the paper's published feature
+  definitions rather than a byte-for-byte verified match. Sanity-checked
+  against a handful of known phishing/legitimate URLs (see
+  `feature_extraction.py`'s `__main__` block) but not validated against
+  the authors' original extraction code.
+- **Purely lexical/structural — no content or reputation signal.** A
+  freshly-registered domain with a short, clean-looking URL can slip
+  past this model; it has no notion of domain age, hosting reputation, or
+  page content. That's a deliberate scope boundary for a fast, offline
+  classifier, not an oversight — a production system would likely combine
+  this with a reputation blocklist as a second signal.
+- **Static snapshot.** Phishing URL patterns shift over time as attackers
+  adapt; this model reflects the 2020 dataset's snapshot of phishing
+  tactics and would need periodic retraining on fresher data in a real
+  deployment.

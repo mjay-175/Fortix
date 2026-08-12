@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 venv/
 .env
-*.pkl
+# model.pkl is intentionally committed (small — 4MB — and needed for the
+# backend to run without retraining), so no blanket *.pkl ignore here.
 .DS_Store
 node_modules/

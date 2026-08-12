@@ -9,13 +9,17 @@ Check items off as you finish them, commit, and push after each milestone
 - [x] `.gitignore`, `requirements.txt`
 
 ## M2 — ML classifier
-- [ ] Pick/download a labeled phishing-vs-legitimate URL dataset
-- [ ] Write `backend/model/features.py` — lexical/host feature extraction
-      from a raw URL string (no network calls needed at inference time)
-- [ ] Write `backend/model/train.py` — load data, extract features, train
-      a classifier, print evaluation metrics
-- [ ] Save trained model artifact (`backend/model/model.pkl`)
-- [ ] Record accuracy / precision / recall in `docs/model_notes.md`
+- [x] Pick/download a labeled phishing-vs-legitimate URL dataset
+      (Vrbančič et al. 2020, 58,645 URLs)
+- [x] Write `backend/model/feature_extraction.py` — lexical/host feature
+      extraction from a raw URL string (no network calls needed at
+      inference time), 98 features
+- [x] Write `backend/model/train.py` — load data, compare 3 model
+      families via CV, tune the winner, evaluate on a held-out test set
+- [x] Save trained model artifact (`backend/model/model.pkl`, 4.0MB)
+- [x] Record accuracy / precision / recall / F1 / ROC-AUC in
+      `docs/model_notes.md`, with confusion matrix + ROC + feature
+      importance plots
 
 ## M3 — Flask backend
 - [ ] `backend/app.py` with `POST /predict` (takes `{"url": "..."}`,

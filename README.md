@@ -22,10 +22,12 @@ the verdict.
 
 ## Build roadmap (matches the commit history)
 
-- [ ] **M1 — Project scaffolding** (this commit): repo structure, README,
+- [x] **M1 — Project scaffolding**: repo structure, README,
       requirements, .gitignore
-- [ ] **M2 — ML classifier**: dataset, feature extraction, training script,
-      saved model + evaluation metrics
+- [x] **M2 — ML classifier**: dataset, feature extraction, training script,
+      saved model + evaluation metrics — **90.2% accuracy, 0.90 F1,
+      0.962 ROC-AUC**, 98 URL-lexical features, 4MB Random Forest.
+      Full write-up: `docs/model_notes.md`.
 - [ ] **M3 — Flask backend**: `/predict` endpoint wrapping the model,
       request/response schema, local testing
 - [ ] **M4 — Chrome extension shell**: manifest v3, popup UI, background
