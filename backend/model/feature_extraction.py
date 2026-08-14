@@ -59,7 +59,22 @@ def _punct_counts(segment: str, prefix: str) -> dict:
 
 
 def _split_url(url: str):
-    """Break a URL into domain / directory / file / params segments."""
+    """Break a URL into domain / directory / file / params segments,
+    matching the convention the training dataset uses (reverse-engineered
+    from the data — see feature_extraction.py module docstring history /
+    docs/model_notes.md section 2 for how this was discovered):
+
+    - directory = path up to and including the LAST "/" (so it always
+      starts and ends with "/" when present)
+    - file = whatever comes after that last "/" (can be "" if the path
+      ends in "/", regardless of whether it "looks like a filename")
+    - if the path has no "/" at all (e.g. "https://example.com" with no
+      trailing slash), directory and file are both considered ABSENT,
+      not empty — signaled by returning None for both, which the caller
+      turns into a -1 sentinel across every related feature, not 0.
+    - params = query string; empty query is likewise ABSENT (None), not
+      an empty-but-present string.
+    """
     if "://" not in url:
         url = "http://" + url  # urlparse needs a scheme to find netloc correctly
 
@@ -68,15 +83,22 @@ def _split_url(url: str):
     path = parsed.path or ""
     query = parsed.query or ""
 
-    segments = [s for s in path.split("/") if s != ""]
-    if segments and "." in segments[-1]:
-        file_part = segments[-1]
-        directory = "/".join(segments[:-1])
+    if path == "":
+        directory, file_part = None, None
     else:
-        file_part = ""
-        directory = "/".join(segments)
+        last_slash = path.rfind("/")
+        if last_slash == -1:
+            # no "/" in the path at all — shouldn't normally happen since
+            # urlparse paths from a URL with a netloc start with "/", but
+            # guard anyway
+            directory, file_part = None, None
+        else:
+            directory = path[: last_slash + 1]
+            file_part = path[last_slash + 1 :]
 
-    return domain, directory, file_part, query
+    params = query if query != "" else None
+
+    return domain, directory, file_part, params
 
 
 def extract_features(url: str) -> dict:
@@ -101,16 +123,33 @@ def extract_features(url: str) -> dict:
         "server" in domain.lower() or "client" in domain.lower()
     )
 
-    features.update(_punct_counts(directory, "directory"))
-    features["directory_length"] = len(directory)
+    if directory is None:
+        for name in PUNCT_CHARS:
+            features[f"qty_{name}_directory"] = -1
+        features["directory_length"] = -1
+    else:
+        features.update(_punct_counts(directory, "directory"))
+        features["directory_length"] = len(directory)
 
-    features.update(_punct_counts(file_part, "file"))
-    features["file_length"] = len(file_part)
+    if file_part is None:
+        for name in PUNCT_CHARS:
+            features[f"qty_{name}_file"] = -1
+        features["file_length"] = -1
+    else:
+        features.update(_punct_counts(file_part, "file"))
+        features["file_length"] = len(file_part)
 
-    features.update(_punct_counts(params, "params"))
-    features["params_length"] = len(params)
-    features["tld_present_params"] = int(bool(tld) and tld in params)
-    features["qty_params"] = 0 if params == "" else len(params.split("&"))
+    if params is None:
+        for name in PUNCT_CHARS:
+            features[f"qty_{name}_params"] = -1
+        features["params_length"] = -1
+        features["tld_present_params"] = -1
+        features["qty_params"] = -1
+    else:
+        features.update(_punct_counts(params, "params"))
+        features["params_length"] = len(params)
+        features["tld_present_params"] = int(bool(tld) and tld in params)
+        features["qty_params"] = len(params.split("&"))
 
     features["email_in_url"] = int(bool(EMAIL_PATTERN.search(url)))
     features["url_shortened"] = int(host.lower() in KNOWN_SHORTENERS)

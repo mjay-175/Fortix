@@ -22,11 +22,21 @@ Check items off as you finish them, commit, and push after each milestone
       importance plots
 
 ## M3 — Flask backend
-- [ ] `backend/app.py` with `POST /predict` (takes `{"url": "..."}`,
-      returns `{"prediction": ..., "confidence": ...}`)
-- [ ] Input validation (reject empty/malformed input)
-- [ ] Load model once at startup, not per-request
-- [ ] Manual test with `curl` / Postman
+- [x] `backend/app.py` with `POST /predict` (takes `{"url": "..."}`,
+      returns `{"prediction": ..., "confidence": ..., "source": ...}`)
+- [x] Input validation (rejects empty/malformed/oversized input, non-JSON)
+- [x] Load model once at startup, not per-request
+- [x] Manual test with `curl` (happy path + every error case)
+- [x] Found + fixed a feature-encoding bug (dataset uses `-1` sentinels
+      for absent URL segments; live extractor used `0`)
+- [x] Diagnosed a dataset collection bias (legit class skews bare-domain,
+      phishing class skews path-heavy) via subset accuracy analysis;
+      retrained on path-present subset with class balancing
+- [x] Built `spot_check.py` — real-world URLs run through the live
+      pipeline, not just offline test-set metrics
+- [x] Added a domain-reputation allowlist layer in front of the ML model
+      (mirrors how real anti-phishing products are built); verified it
+      can't be bypassed by brand-name-embedded lookalike domains
 
 ## M4 — Chrome extension shell
 - [ ] `manifest.json` (Manifest V3)

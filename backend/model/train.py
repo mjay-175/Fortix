@@ -64,9 +64,28 @@ NETWORK_DEPENDENT_COLUMNS = [
 ]
 
 
-def load_data(path="dataset_small.csv"):
+def load_data(path="dataset_small.csv", restrict_to_path_present=True):
     df = pd.read_csv(path)
     df = df.drop(columns=NETWORK_DEPENDENT_COLUMNS)
+
+    if restrict_to_path_present:
+        # See docs/model_notes.md section 8: the dataset's legitimate
+        # examples are heavily weighted toward bare root-domain entries
+        # (no path, no query — e.g. sourced from an Alexa top-sites list
+        # as just "example.com"), while phishing examples are almost
+        # always full in-the-wild URLs with a path. A model trained on
+        # the full mix learns "has a path at all" as a strong phishing
+        # signal — which is a data-collection artifact, not a real
+        # phishing indicator, and it tanks legitimate-URL recall (77%)
+        # on exactly the kind of URL a browser extension actually sees
+        # (nearly every real browser URL includes at least "/").
+        # Training on the path-present subset for both classes removes
+        # that artifact and matches production traffic.
+        before = len(df)
+        df = df[df["directory_length"] >= 0].reset_index(drop=True)
+        print(f"Restricted to path-present rows: {before} -> {len(df)} "
+              f"(class balance: {df['phishing'].value_counts(normalize=True).to_dict()})")
+
     missing = set(FEATURE_ORDER) - set(df.columns)
     extra = set(df.columns) - set(FEATURE_ORDER) - {"phishing"}
     assert not missing, f"feature_extraction.py expects columns the CSV doesn't have: {missing}"
@@ -111,13 +130,13 @@ def main():
 
     candidates = {
         "logistic_regression": (
-            LogisticRegression(max_iter=2000, random_state=RANDOM_STATE), True
+            LogisticRegression(max_iter=2000, random_state=RANDOM_STATE, class_weight="balanced"), True
         ),
         "random_forest": (
-            RandomForestClassifier(n_estimators=200, random_state=RANDOM_STATE, n_jobs=-1), False
+            RandomForestClassifier(n_estimators=200, random_state=RANDOM_STATE, n_jobs=-1, class_weight="balanced"), False
         ),
         "gradient_boosting": (
-            HistGradientBoostingClassifier(random_state=RANDOM_STATE), False
+            HistGradientBoostingClassifier(random_state=RANDOM_STATE, class_weight="balanced"), False
         ),
     }
 
@@ -133,7 +152,7 @@ def main():
 
     # Hyperparameter tuning on the winning family
     if best_name == "random_forest":
-        base = RandomForestClassifier(random_state=RANDOM_STATE, n_jobs=-1)
+        base = RandomForestClassifier(random_state=RANDOM_STATE, n_jobs=-1, class_weight="balanced")
         # max_depth is deliberately bounded (no "None"/unlimited option):
         # unbounded trees on 98 features x 47k rows produced a 200MB+
         # model.pkl, which is a non-starter for a repo GitHub will reject
@@ -149,7 +168,7 @@ def main():
         }
         needs_scaling = False
     elif best_name == "gradient_boosting":
-        base = HistGradientBoostingClassifier(random_state=RANDOM_STATE)
+        base = HistGradientBoostingClassifier(random_state=RANDOM_STATE, class_weight="balanced")
         param_dist = {
             "max_iter": [100, 200, 300],
             "learning_rate": [0.05, 0.1, 0.2],
@@ -158,7 +177,7 @@ def main():
         }
         needs_scaling = False
     else:
-        base = LogisticRegression(max_iter=2000, random_state=RANDOM_STATE)
+        base = LogisticRegression(max_iter=2000, random_state=RANDOM_STATE, class_weight="balanced")
         param_dist = {"C": [0.01, 0.1, 1, 10, 100]}
         needs_scaling = True
 

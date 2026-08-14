@@ -28,8 +28,12 @@ the verdict.
       saved model + evaluation metrics — **90.2% accuracy, 0.90 F1,
       0.962 ROC-AUC**, 98 URL-lexical features, 4MB Random Forest.
       Full write-up: `docs/model_notes.md`.
-- [ ] **M3 — Flask backend**: `/predict` endpoint wrapping the model,
-      request/response schema, local testing
+- [x] **M3 — Flask backend**: `POST /predict` + `GET /health`, input
+      validation, and a hybrid pipeline (domain allowlist + ML model).
+      Along the way: found and fixed a feature-encoding bug, diagnosed a
+      dataset collection bias, retrained to partially correct it, and
+      added a domain-reputation layer to handle what retraining alone
+      couldn't fix. Full diagnostic writeup: `docs/model_notes.md` §8.
 - [ ] **M4 — Chrome extension shell**: manifest v3, popup UI, background
       service worker, calling the backend
 - [ ] **M5 — Integration + error handling**: CORS, loading/error states,
@@ -37,18 +41,29 @@ the verdict.
 - [ ] **M6 — Polish**: README screenshots/gif, packaging, optional
       deployment of the backend
 
-## Local setup (filled in as each milestone lands)
+## Local setup
 
 ```bash
 cd backend
-python -m venv venv && source venv/bin/activate
+python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 python app.py
 ```
 
+Server runs at `http://127.0.0.1:5000`. Try it:
+
+```bash
+curl -X POST http://127.0.0.1:5000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"url": "http://paypal-secure-login.verify-account.tk/signin.php"}'
+```
+
 Then load `extension/` as an unpacked extension in `chrome://extensions`
-(Developer mode → Load unpacked).
+(Developer mode → Load unpacked) — once M4 lands.
 
 ## Status
 
-Currently at M1. See `docs/roadmap.md` for task-level detail per milestone.
+Currently at M3. See `docs/roadmap.md` for task-level detail per
+milestone and `docs/model_notes.md` for the full ML write-up (dataset,
+feature engineering, model comparison, metrics, and — worth reading —
+two real bugs found and fixed along the way).
