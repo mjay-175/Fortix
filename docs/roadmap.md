@@ -39,20 +39,30 @@ Check items off as you finish them, commit, and push after each milestone
       can't be bypassed by brand-name-embedded lookalike domains
 
 ## M4 — Chrome extension shell
-- [ ] `manifest.json` (Manifest V3)
-- [ ] `popup.html` + `popup.js` — shows current tab's URL and a
-      "Check this page" button
-- [ ] `background.js` — service worker, fetches active tab URL
-- [ ] Wire popup → background → backend → render verdict
+- [x] `manifest.json` (Manifest V3)
+- [x] `popup.html` + `popup.css` + `popup.js` — shows current tab's URL
+      and a "Check this page" button
+- [x] `background.js` — service worker owning all backend communication,
+      with a 5s timeout via AbortController
+- [x] Wire popup → background (message passing) → backend → render verdict
+- [x] Icons (16/48/128px)
 
 ## M5 — Integration + error handling
-- [ ] Enable CORS on the Flask side for the extension's origin
-- [ ] Handle backend-unreachable / timeout in the popup UI
-- [ ] Loading state while waiting on prediction
-- [ ] End-to-end manual test against a few known-safe and known-phishy URLs
+- [x] Enable CORS on the Flask side (`flask-cors`) for the extension's
+      origin, verified with a simulated `chrome-extension://` origin header
+- [x] Handle backend-unreachable / timeout in the popup UI (shown as an
+      inline error box with a specific "is app.py running?" hint)
+- [x] Loading state (spinner + disabled button) while waiting on prediction
+- [x] Non-http(s) tabs (chrome://, about:) handled — check button disabled
+      with an explanation instead of erroring
+- [x] End-to-end manual test: `spot_check.py` re-run against the live
+      server (not just the offline pipeline) — still 16/16
+- [x] Confirmed exact failure mode when backend is down (connection
+      refused) matches what `background.js`'s try/catch expects
 
 ## M6 — Polish
-- [ ] Icons for the extension
-- [ ] Screenshots/GIF in README
+- [x] Icons for the extension
+- [ ] Screenshots/GIF in README (needs a real Chrome load — do this once
+      you've loaded the unpacked extension yourself)
 - [ ] Optional: deploy backend (Render/Railway) so it's not just localhost
-- [ ] Final README pass — setup steps someone else could follow
+- [x] Final README pass — setup steps someone else could follow

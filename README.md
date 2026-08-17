@@ -34,12 +34,15 @@ the verdict.
       dataset collection bias, retrained to partially correct it, and
       added a domain-reputation layer to handle what retraining alone
       couldn't fix. Full diagnostic writeup: `docs/model_notes.md` §8.
-- [ ] **M4 — Chrome extension shell**: manifest v3, popup UI, background
-      service worker, calling the backend
-- [ ] **M5 — Integration + error handling**: CORS, loading/error states,
-      manual end-to-end test pass
-- [ ] **M6 — Polish**: README screenshots/gif, packaging, optional
-      deployment of the backend
+- [x] **M4 — Chrome extension shell**: Manifest V3, popup UI, background
+      service worker (message-passing architecture, not a direct fetch
+      from the popup — keeps all backend calls in one place)
+- [x] **M5 — Integration + error handling**: CORS enabled and verified
+      against a real `chrome-extension://` origin, backend-down and
+      timeout states handled in the popup, non-http(s) tabs handled,
+      `spot_check.py` re-run against the live server end-to-end
+- [x] **M6 — Polish**: icons, README setup instructions. Screenshots and
+      backend deployment left as optional follow-ups (see roadmap.md)
 
 ## Local setup
 
@@ -58,12 +61,25 @@ curl -X POST http://127.0.0.1:5000/predict \
   -d '{"url": "http://paypal-secure-login.verify-account.tk/signin.php"}'
 ```
 
-Then load `extension/` as an unpacked extension in `chrome://extensions`
-(Developer mode → Load unpacked) — once M4 lands.
+Then load `extension/` as an unpacked extension:
+
+1. Go to `chrome://extensions`
+2. Turn on **Developer mode** (top-right toggle)
+3. Click **Load unpacked**, select the `extension/` folder
+4. Pin the Fortix icon, visit any page, click it, click **Check this page**
+
+The backend must be running (`python app.py`) for the extension to work —
+it only talks to `127.0.0.1:5000`, nothing external.
 
 ## Status
 
-Currently at M3. See `docs/roadmap.md` for task-level detail per
+Everything through M6 is built: trained model, Flask API, and a working
+Chrome extension. See `docs/roadmap.md` for task-level detail per
 milestone and `docs/model_notes.md` for the full ML write-up (dataset,
 feature engineering, model comparison, metrics, and — worth reading —
 two real bugs found and fixed along the way).
+
+Two things intentionally left open, noted rather than hidden:
+- No README screenshots yet (needs a real Chrome load on your end)
+- Backend is localhost-only; deploying it (Render/Railway free tier)
+  would make this shareable as a live link instead of "clone the repo"

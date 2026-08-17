@@ -21,6 +21,7 @@ import time
 import joblib
 import pandas as pd
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "model"))
 from feature_extraction import FEATURE_ORDER, extract_features  # noqa: E402
@@ -67,6 +68,20 @@ def registered_domain(host: str) -> str:
     return ".".join(parts[-2:]) if len(parts) >= 2 else host
 
 app = Flask(__name__)
+
+# The Chrome extension's background service worker calls this API from a
+# chrome-extension:// origin, not http/https, so the browser treats it as
+# cross-origin. MV3 background workers actually bypass CORS entirely for
+# hosts declared in the manifest's host_permissions — so this isn't
+# strictly required for the extension itself — but it's enabled anyway so
+# this API is also directly callable from a browser tab, curl, Postman,
+# or a future non-extension frontend without surprises.
+#
+# Wide open (origins="*") because this is a local-only dev server with no
+# auth and no state-changing side effects — /predict just runs inference.
+# A real deployment would restrict this to the extension's specific ID
+# (chrome-extension://<id>) instead.
+CORS(app)
 
 _bundle = None  # populated by load_model()
 
